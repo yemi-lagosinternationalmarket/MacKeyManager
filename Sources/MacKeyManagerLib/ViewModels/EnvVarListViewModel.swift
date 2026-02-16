@@ -24,6 +24,7 @@ public final class EnvVarListViewModel {
     public var showingDiffPreview = false
     public var pendingDiff = ""
     public var showingAddSheet = false
+    public var showingAddFromVaultSheet = false
     public var selectedVariableID: UUID?
 
     // MARK: - Services

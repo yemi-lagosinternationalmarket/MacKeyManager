@@ -11,10 +11,10 @@ struct ContentView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedSection: SidebarSection? = .global
     @State private var selectedStoredKeyID: UUID?
+    @State private var showError = false
+    @State private var errorText = ""
 
     var body: some View {
-        @Bindable var vm = appState.envVarListVM
-
         NavigationSplitView {
             SidebarView(selectedSection: $selectedSection)
                 .environment(appState)
@@ -24,26 +24,17 @@ struct ContentView: View {
             detailPanel
         }
         .navigationTitle("MacKeyManager")
-        .alert(
-            "Error",
-            isPresented: .init(
-                get: { vm.errorMessage != nil },
-                set: { if !$0 { vm.errorMessage = nil } }
-            )
-        ) {
-            Button("OK") { vm.errorMessage = nil }
+        .alert("Error", isPresented: $showError) {
+            Button("OK") { }
         } message: {
-            if let msg = vm.errorMessage {
-                Text(msg)
-            }
+            Text(errorText)
         }
         .onAppear {
             appState.envVarListVM.loadGlobalVariables()
-        }
-        .keyboardShortcut("n", modifiers: .command)
-        .onDeleteCommand {
-            if let id = vm.selectedVariableID {
-                vm.deleteVariable(id: id)
+            if let err = appState.envVarListVM.errorMessage {
+                errorText = err
+                showError = true
+                appState.envVarListVM.errorMessage = nil
             }
         }
     }

@@ -65,8 +65,18 @@ struct EnvVarListView: View {
             Divider()
 
             HStack {
-                Button {
-                    vm.showingAddSheet = true
+                Menu {
+                    Button {
+                        vm.showingAddSheet = true
+                    } label: {
+                        Label("Add Variable", systemImage: "plus.square")
+                    }
+                    Button {
+                        vm.showingAddFromVaultSheet = true
+                    } label: {
+                        Label("Add from Vault", systemImage: "lock.shield")
+                    }
+                    .disabled(appState.keyVaultService.storedKeys.isEmpty)
                 } label: {
                     Label("Add Variable", systemImage: "plus")
                 }
@@ -91,6 +101,10 @@ struct EnvVarListView: View {
         .navigationSplitViewColumnWidth(min: 300, ideal: 380)
         .sheet(isPresented: $vm.showingAddSheet) {
             AddVariableSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $vm.showingAddFromVaultSheet) {
+            AddFromVaultSheet()
                 .environment(appState)
         }
         .sheet(isPresented: $vm.showingDiffPreview) {

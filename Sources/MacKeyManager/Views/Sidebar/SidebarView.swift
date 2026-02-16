@@ -6,72 +6,65 @@ struct SidebarView: View {
     @Binding var selectedSection: SidebarSection?
     @State private var renamingProjectID: UUID?
     @State private var renameText = ""
+    @State private var showRenameAlert = false
     @State private var collapsedProjects: Set<UUID> = []
 
     var body: some View {
-        List(selection: $selectedSection) {
+        List {
             Section("Key Vault") {
-                Label("Vault", systemImage: "lock.shield")
-                    .tag(SidebarSection.vault)
-                    .badge(appState.keyVaultService.storedKeys.count)
+                sidebarRow(
+                    label: "Vault",
+                    icon: "lock.shield",
+                    section: .vault,
+                    badge: appState.keyVaultService.storedKeys.count
+                )
             }
 
             Section("Environment") {
-                Label("Global (.zshrc)", systemImage: "globe")
-                    .tag(SidebarSection.global)
-                    .badge(appState.zshrcService.variables.count)
+                sidebarRow(
+                    label: "Global (.zshrc)",
+                    icon: "globe",
+                    section: .global,
+                    badge: appState.zshrcService.variables.count
+                )
             }
 
-            // Each project is its own collapsible Section.
-            // Section headers are NOT selectable rows, so they
-            // can't break the List's selection binding.
-            ForEach(appState.projectVM.projects) { project in
-                if renamingProjectID == project.id {
-                    Section(project.name) {
-                        TextField("Project name", text: $renameText, onCommit: {
-                            appState.projectVM.rename(projectID: project.id, newName: renameText)
-                            renamingProjectID = nil
-                        })
-                        .textFieldStyle(.roundedBorder)
-                    }
-                } else {
-                    Section(isExpanded: expandedBinding(for: project.id)) {
-                        ForEach(project.envFiles, id: \.self) { envURL in
-                            Label {
-                                Text(Project.envDisplayName(for: envURL))
-                                Text("(\(envURL.lastPathComponent))")
-                                    .foregroundStyle(.tertiary)
-                                    .font(.caption)
-                            } icon: {
-                                Image(systemName: "doc.text")
-                            }
-                            .tag(SidebarSection.projectEnv(project.id, envURL))
+            Section("Projects") {
+                ForEach(appState.projectVM.projects) { project in
+                    if project.envFiles.count == 1, let envURL = project.envFiles.first {
+                        // Single env file — show as flat row
+                        sidebarRow(
+                            label: project.name,
+                            icon: "folder",
+                            section: .projectEnv(project.id, envURL)
+                        )
+                        .contextMenu {
+                            projectContextMenu(project: project)
                         }
-                    } header: {
-                        Label(project.name, systemImage: "folder")
+                    } else {
+                        // Multiple env files — show folder header + children
+                        projectFolderHeader(project: project)
                             .contextMenu {
-                                Button("Rename...") {
-                                    renameText = project.name
-                                    renamingProjectID = project.id
-                                }
-                                Button("Refresh Environments") {
-                                    appState.projectVM.refreshEnvFiles(projectID: project.id)
-                                }
-                                Divider()
-                                Button("Remove", role: .destructive) {
-                                    let projectID = project.id
-                                    appState.projectVM.remove(projectID: projectID)
-                                    if case .projectEnv(let id, _) = selectedSection, id == projectID {
-                                        selectedSection = .global
-                                    }
+                                projectContextMenu(project: project)
+                            }
+
+                        if !collapsedProjects.contains(project.id) {
+                            ForEach(project.envFiles, id: \.self) { envURL in
+                                sidebarRow(
+                                    label: Project.envDisplayName(for: envURL),
+                                    icon: "doc.text",
+                                    section: .projectEnv(project.id, envURL),
+                                    indented: true
+                                )
+                                .contextMenu {
+                                    projectContextMenu(project: project)
                                 }
                             }
+                        }
                     }
                 }
-            }
 
-            if appState.projectVM.projects.isEmpty {
-                Section("Projects") {
+                if appState.projectVM.projects.isEmpty {
                     Text("No projects added")
                         .foregroundStyle(.tertiary)
                         .font(.callout)
@@ -82,21 +75,98 @@ struct SidebarView: View {
             addProjectButton
         }
         .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-        .onChange(of: selectedSection) { _, newValue in
-            handleSectionChange(newValue)
+        .alert("Rename Project", isPresented: $showRenameAlert) {
+            TextField("Project name", text: $renameText)
+            Button("Rename") {
+                if let id = renamingProjectID {
+                    appState.projectVM.rename(projectID: id, newName: renameText)
+                }
+                renamingProjectID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                renamingProjectID = nil
+            }
         }
     }
 
-    private func expandedBinding(for projectID: UUID) -> Binding<Bool> {
-        Binding(
-            get: { !collapsedProjects.contains(projectID) },
-            set: { isExpanded in
-                if isExpanded {
-                    collapsedProjects.remove(projectID)
+    private func projectFolderHeader(project: Project) -> some View {
+        let isCollapsed = collapsedProjects.contains(project.id)
+        return HStack(spacing: 6) {
+            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: 10)
+            Label(project.name, systemImage: "folder")
+            Spacer()
+            Text("\(project.envFiles.count)")
+                .font(.caption2)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.quaternary)
+                .clipShape(Capsule())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if isCollapsed {
+                    collapsedProjects.remove(project.id)
                 } else {
-                    collapsedProjects.insert(projectID)
+                    collapsedProjects.insert(project.id)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func projectContextMenu(project: Project) -> some View {
+        Button("Rename...") {
+            renameText = project.name
+            renamingProjectID = project.id
+            showRenameAlert = true
+        }
+        Button("Refresh Environments") {
+            appState.projectVM.refreshEnvFiles(projectID: project.id)
+        }
+        Divider()
+        Button("Remove", role: .destructive) {
+            appState.projectVM.remove(projectID: project.id)
+            if case .projectEnv(let id, _) = selectedSection, id == project.id {
+                selectedSection = .global
+            }
+        }
+    }
+
+    private func sidebarRow(
+        label: String,
+        icon: String,
+        section: SidebarSection,
+        badge: Int? = nil,
+        indented: Bool = false
+    ) -> some View {
+        HStack {
+            if indented {
+                Spacer().frame(width: 16)
+            }
+            Label(label, systemImage: icon)
+            Spacer()
+            if let badge, badge > 0 {
+                Text("\(badge)")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary)
+                    .clipShape(Capsule())
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedSection = section
+            handleSectionChange(section)
+        }
+        .listRowBackground(
+            selectedSection == section
+                ? Color.accentColor.opacity(0.2)
+                : Color.clear
         )
     }
 
@@ -113,8 +183,7 @@ struct SidebarView: View {
         .padding(.vertical, 8)
     }
 
-    private func handleSectionChange(_ section: SidebarSection?) {
-        guard let section else { return }
+    private func handleSectionChange(_ section: SidebarSection) {
         let vm = appState.envVarListVM
 
         switch section {
