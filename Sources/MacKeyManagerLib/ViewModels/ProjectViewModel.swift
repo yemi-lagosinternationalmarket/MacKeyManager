@@ -42,15 +42,20 @@ public final class ProjectViewModel {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        // Check for .env file
-        let envURL = url.appendingPathComponent(".env")
         let name = url.lastPathComponent
 
         // Don't add duplicates
         guard !projects.contains(where: { $0.path == url }) else { return }
 
-        let project = Project(name: name, path: url, envFilePath: envURL)
+        let envFiles = Project.detectEnvFiles(in: url)
+        let project = Project(name: name, path: url, envFiles: envFiles.isEmpty ? nil : envFiles)
         projects.append(project)
+        saveToDefaults()
+    }
+
+    public func refreshEnvFiles(projectID: UUID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        projects[index].refreshEnvFiles()
         saveToDefaults()
     }
 

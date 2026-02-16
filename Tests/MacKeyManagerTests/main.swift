@@ -14,6 +14,7 @@ struct TestMain {
         runValidatorTests()
         runExpiryTests()
         runKeyVaultServiceTests()
+        runProjectTests()
 
         printResults()
 

@@ -201,11 +201,33 @@ struct ImportKeySheet: View {
                 }
 
                 ForEach(appState.projectVM.projects) { project in
-                    Button {
-                        importIntoProject(project)
-                        dismiss()
-                    } label: {
-                        Label(project.name, systemImage: "folder")
+                    if project.envFiles.count == 1 {
+                        Button {
+                            importIntoEnvFile(project.envFiles[0], projectName: project.name)
+                            dismiss()
+                        } label: {
+                            Label(project.name, systemImage: "folder")
+                        }
+                    } else {
+                        DisclosureGroup {
+                            ForEach(project.envFiles, id: \.self) { envURL in
+                                Button {
+                                    importIntoEnvFile(envURL, projectName: project.name)
+                                    dismiss()
+                                } label: {
+                                    Label {
+                                        Text(Project.envDisplayName(for: envURL))
+                                        Text("(\(envURL.lastPathComponent))")
+                                            .foregroundStyle(.tertiary)
+                                            .font(.caption)
+                                    } icon: {
+                                        Image(systemName: "doc.text")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label(project.name, systemImage: "folder")
+                        }
                     }
                 }
             }
@@ -227,8 +249,8 @@ struct ImportKeySheet: View {
         appState.keyVaultService.importKey(storedKeyID: storedKey.id, into: appState.zshrcService)
     }
 
-    private func importIntoProject(_ project: Project) {
-        let service = appState.envVarListVM.dotEnvService(for: project.envFilePath, projectName: project.name)
+    private func importIntoEnvFile(_ envURL: URL, projectName: String) {
+        let service = appState.envVarListVM.dotEnvService(for: envURL, projectName: projectName)
         appState.keyVaultService.importKey(storedKeyID: storedKey.id, into: service)
     }
 }

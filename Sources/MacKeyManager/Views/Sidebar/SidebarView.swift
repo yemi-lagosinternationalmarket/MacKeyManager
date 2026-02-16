@@ -6,6 +6,7 @@ struct SidebarView: View {
     @Binding var selectedSection: SidebarSection?
     @State private var renamingProjectID: UUID?
     @State private var renameText = ""
+    @State private var expandedProjects: Set<UUID> = []
 
     var body: some View {
         List(selection: $selectedSection) {
@@ -23,7 +24,7 @@ struct SidebarView: View {
 
             Section("Projects") {
                 ForEach(appState.projectVM.projects) { project in
-                    projectRow(project)
+                    projectRows(project)
                 }
 
                 if appState.projectVM.projects.isEmpty {
@@ -43,7 +44,7 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func projectRow(_ project: Project) -> some View {
+    private func projectRows(_ project: Project) -> some View {
         if renamingProjectID == project.id {
             TextField("Project name", text: $renameText, onCommit: {
                 appState.projectVM.rename(projectID: project.id, newName: renameText)
@@ -51,21 +52,57 @@ struct SidebarView: View {
             })
             .textFieldStyle(.roundedBorder)
         } else {
-            Label(project.name, systemImage: "folder")
-                .tag(SidebarSection.project(project.id))
-                .contextMenu {
-                    Button("Rename...") {
-                        renameText = project.name
-                        renamingProjectID = project.id
-                    }
-                    Divider()
-                    Button("Remove", role: .destructive) {
-                        appState.projectVM.remove(projectID: project.id)
-                        if case .project(let id) = selectedSection, id == project.id {
-                            selectedSection = .global
-                        }
+            // Project header — toggles expand/collapse, not selectable
+            HStack(spacing: 4) {
+                Image(systemName: expandedProjects.contains(project.id) ? "chevron.down" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+                Label(project.name, systemImage: "folder")
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if expandedProjects.contains(project.id) {
+                        expandedProjects.remove(project.id)
+                    } else {
+                        expandedProjects.insert(project.id)
                     }
                 }
+            }
+            .contextMenu {
+                Button("Rename...") {
+                    renameText = project.name
+                    renamingProjectID = project.id
+                }
+                Button("Refresh Environments") {
+                    appState.projectVM.refreshEnvFiles(projectID: project.id)
+                }
+                Divider()
+                Button("Remove", role: .destructive) {
+                    let projectID = project.id
+                    appState.projectVM.remove(projectID: projectID)
+                    if case .projectEnv(let id, _) = selectedSection, id == projectID {
+                        selectedSection = .global
+                    }
+                }
+            }
+
+            // Env file rows — each is a direct tagged child of the List
+            if expandedProjects.contains(project.id) {
+                ForEach(project.envFiles, id: \.self) { envURL in
+                    Label {
+                        Text(Project.envDisplayName(for: envURL))
+                        Text("(\(envURL.lastPathComponent))")
+                            .foregroundStyle(.tertiary)
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "doc.text")
+                    }
+                    .padding(.leading, 16)
+                    .tag(SidebarSection.projectEnv(project.id, envURL))
+                }
+            }
         }
     }
 
@@ -92,11 +129,12 @@ struct SidebarView: View {
         case .global:
             vm.activeSource = .global
             vm.loadGlobalVariables()
-        case .project(let projectID):
+        case .projectEnv(let projectID, let envURL):
             if let project = appState.projectVM.projects.first(where: { $0.id == projectID }) {
-                vm.activeSource = .project(project.envFilePath, project.name)
-                vm.loadProjectVariables(fileURL: project.envFilePath, projectName: project.name)
-                appState.fileWatcher.watch(url: project.envFilePath)
+                let displayName = "\(project.name) — \(Project.envDisplayName(for: envURL))"
+                vm.activeSource = .project(envURL, displayName)
+                vm.loadProjectVariables(fileURL: envURL, projectName: project.name)
+                appState.fileWatcher.watch(url: envURL)
             }
         }
     }

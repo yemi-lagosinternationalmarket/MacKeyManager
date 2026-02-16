@@ -85,9 +85,7 @@ struct MenuBarView: View {
             HStack {
                 Button("Open MacKeyManager") {
                     NSApp.activate(ignoringOtherApps: true)
-                    if let window = NSApp.windows.first(where: {
-                        $0.title.contains("MacKeyManager") || $0.isKeyWindow
-                    }) {
+                    if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
                         window.makeKeyAndOrderFront(nil)
                     }
                 }

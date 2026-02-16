@@ -4,7 +4,7 @@ import MacKeyManagerLib
 enum SidebarSection: Hashable {
     case vault
     case global
-    case project(UUID)
+    case projectEnv(UUID, URL)
 }
 
 struct ContentView: View {
