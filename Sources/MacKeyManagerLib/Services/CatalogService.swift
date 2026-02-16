@@ -103,9 +103,30 @@ public final class CatalogService {
         Array(entries.sorted { $0.lastSeenDate > $1.lastSeenDate }.prefix(limit))
     }
 
+    // MARK: - Expiry
+
+    public func setExpiryDate(entryID: UUID, date: Date?) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        entries[index].expiryDate = date
+        persist()
+    }
+
+    public func expiredEntries() -> [CatalogEntry] {
+        entries.filter { $0.expiryStatus == .expired }
+    }
+
+    public func expiringSoonEntries(withinDays days: Int = 7) -> [CatalogEntry] {
+        let now = Date.now
+        let cutoff = Calendar.current.date(byAdding: .day, value: days, to: now)!
+        return entries.filter { entry in
+            guard let expiry = entry.expiryDate else { return false }
+            return expiry >= now && expiry <= cutoff
+        }
+    }
+
     // MARK: - Helpers
 
-    private func catalogKey(for variable: EnvironmentVariable) -> String {
+    public func catalogKey(for variable: EnvironmentVariable) -> String {
         "\(variable.scope.rawValue):\(variable.sourceFile.path):\(variable.name)"
     }
 }

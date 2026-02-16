@@ -2,6 +2,7 @@ import SwiftUI
 import MacKeyManagerLib
 
 enum SidebarSection: Hashable {
+    case vault
     case global
     case project(UUID)
 }
@@ -9,6 +10,7 @@ enum SidebarSection: Hashable {
 struct ContentView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedSection: SidebarSection? = .global
+    @State private var selectedStoredKeyID: UUID?
 
     var body: some View {
         @Bindable var vm = appState.envVarListVM
@@ -17,8 +19,7 @@ struct ContentView: View {
             SidebarView(selectedSection: $selectedSection)
                 .environment(appState)
         } content: {
-            EnvVarListView()
-                .environment(appState)
+            contentPanel
         } detail: {
             detailPanel
         }
@@ -39,8 +40,7 @@ struct ContentView: View {
         .onAppear {
             appState.envVarListVM.loadGlobalVariables()
         }
-        // Keyboard shortcuts
-        .keyboardShortcut("n", modifiers: .command) // Cmd+N handled by Add button
+        .keyboardShortcut("n", modifiers: .command)
         .onDeleteCommand {
             if let id = vm.selectedVariableID {
                 vm.deleteVariable(id: id)
@@ -49,18 +49,48 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var detailPanel: some View {
-        if let variable = appState.envVarListVM.selectedVariable {
-            EnvVarDetailView(variable: variable)
+    private var contentPanel: some View {
+        switch selectedSection {
+        case .vault:
+            KeyVaultListView(selectedStoredKeyID: $selectedStoredKeyID)
                 .environment(appState)
-                .id(variable.id)
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "key.viewfinder")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.tertiary)
-                Text("Select a variable to view details")
-                    .foregroundStyle(.secondary)
+        default:
+            EnvVarListView()
+                .environment(appState)
+        }
+    }
+
+    @ViewBuilder
+    private var detailPanel: some View {
+        switch selectedSection {
+        case .vault:
+            if let keyID = selectedStoredKeyID,
+               let key = appState.keyVaultService.storedKeys.first(where: { $0.id == keyID }) {
+                StoredKeyDetailView(storedKey: key)
+                    .environment(appState)
+                    .id(key.id)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.tertiary)
+                    Text("Select a key to view details")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        default:
+            if let variable = appState.envVarListVM.selectedVariable {
+                EnvVarDetailView(variable: variable)
+                    .environment(appState)
+                    .id(variable.id)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "key.viewfinder")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.tertiary)
+                    Text("Select a variable to view details")
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

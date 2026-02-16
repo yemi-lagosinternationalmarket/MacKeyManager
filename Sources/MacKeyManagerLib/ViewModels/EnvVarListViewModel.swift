@@ -6,12 +6,20 @@ public enum SortOrder: String, CaseIterable {
     case lineNumber = "File Order"
 }
 
+public enum ExpiryFilter: String, CaseIterable {
+    case all = "All"
+    case expiringSoon = "Expiring Soon"
+    case expired = "Expired"
+    case noExpiry = "No Expiry"
+}
+
 @Observable
 public final class EnvVarListViewModel {
     // MARK: - State
 
     public var searchText = ""
     public var sortOrder: SortOrder = .nameAscending
+    public var expiryFilter: ExpiryFilter = .all
     public var errorMessage: String?
     public var showingDiffPreview = false
     public var pendingDiff = ""
@@ -22,6 +30,7 @@ public final class EnvVarListViewModel {
 
     private let zshrcService: ZshrcService
     private let catalogService: CatalogService
+    private let keyVaultService: KeyVaultService
     private var dotEnvServices: [URL: DotEnvService] = [:]
 
     // MARK: - Active source
@@ -33,9 +42,10 @@ public final class EnvVarListViewModel {
         case project(URL, String)
     }
 
-    public init(zshrcService: ZshrcService, catalogService: CatalogService) {
+    public init(zshrcService: ZshrcService, catalogService: CatalogService, keyVaultService: KeyVaultService) {
         self.zshrcService = zshrcService
         self.catalogService = catalogService
+        self.keyVaultService = keyVaultService
     }
 
     // MARK: - Computed
@@ -57,6 +67,23 @@ public final class EnvVarListViewModel {
             result = result.filter {
                 $0.name.lowercased().contains(query) ||
                 $0.value.lowercased().contains(query)
+            }
+        }
+
+        if expiryFilter != .all {
+            result = result.filter { variable in
+                let entry = catalogEntry(for: variable)
+                let status = entry?.expiryStatus ?? .noExpiry
+                switch expiryFilter {
+                case .all:
+                    return true
+                case .expiringSoon:
+                    return status == .expiringSoon
+                case .expired:
+                    return status == .expired
+                case .noExpiry:
+                    return status == .noExpiry
+                }
             }
         }
 
@@ -93,6 +120,52 @@ public final class EnvVarListViewModel {
         case .project(let url, _):
             return dotEnvServices[url]
         }
+    }
+
+    // MARK: - Expiry
+
+    public func catalogEntry(for variable: EnvironmentVariable) -> CatalogEntry? {
+        let key = catalogService.catalogKey(for: variable)
+        return catalogService.entries.first { $0.variableKey == key }
+    }
+
+    public func setExpiryDate(for variableID: UUID, date: Date?) {
+        guard let variable = allVariables.first(where: { $0.id == variableID }) else { return }
+        let key = catalogService.catalogKey(for: variable)
+        guard let entry = catalogService.entries.first(where: { $0.variableKey == key }) else { return }
+        catalogService.setExpiryDate(entryID: entry.id, date: date)
+    }
+
+    public var expiryFilterCounts: [ExpiryFilter: Int] {
+        var counts: [ExpiryFilter: Int] = [:]
+        for variable in allVariables {
+            let entry = catalogEntry(for: variable)
+            let status = entry?.expiryStatus ?? .noExpiry
+            switch status {
+            case .expired:
+                counts[.expired, default: 0] += 1
+            case .expiringSoon:
+                counts[.expiringSoon, default: 0] += 1
+            case .noExpiry:
+                counts[.noExpiry, default: 0] += 1
+            case .valid:
+                break
+            }
+        }
+        return counts
+    }
+
+    public var hasAnyExpiry: Bool {
+        allVariables.contains { variable in
+            let entry = catalogEntry(for: variable)
+            return entry?.expiryDate != nil
+        }
+    }
+
+    // MARK: - Vault
+
+    public func saveToVault(variable: EnvironmentVariable, name: String, tags: [String]) {
+        keyVaultService.storeFromVariable(variable, name: name, tags: tags)
     }
 
     // MARK: - Actions
@@ -172,7 +245,6 @@ public final class EnvVarListViewModel {
     public func prepareSave() {
         switch activeSource {
         case .global:
-            // Show diff preview for .zshrc
             do {
                 pendingDiff = try zshrcService.generateDiff()
                 showingDiffPreview = true
@@ -180,7 +252,6 @@ public final class EnvVarListViewModel {
                 errorMessage = error.localizedDescription
             }
         case .project(let url, _):
-            // Direct save for .env files
             do {
                 try dotEnvServices[url]?.save()
             } catch {
@@ -204,7 +275,6 @@ public final class EnvVarListViewModel {
         pendingDiff = ""
     }
 
-    /// Reload the active source (e.g., after external file change).
     public func reloadActiveSource() {
         switch activeSource {
         case .global:
@@ -214,7 +284,6 @@ public final class EnvVarListViewModel {
         }
     }
 
-    /// Get or create a DotEnvService for a project.
     public func dotEnvService(for url: URL, projectName: String) -> DotEnvService {
         if let existing = dotEnvServices[url] {
             return existing

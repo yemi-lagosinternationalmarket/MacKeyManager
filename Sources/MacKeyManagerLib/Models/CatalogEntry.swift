@@ -1,5 +1,12 @@
 import Foundation
 
+public enum ExpiryStatus: String, CaseIterable {
+    case valid
+    case expiringSoon
+    case expired
+    case noExpiry
+}
+
 public struct CatalogEntry: Identifiable, Codable, Hashable {
     public let id: UUID
     public var variableKey: String
@@ -10,6 +17,7 @@ public struct CatalogEntry: Identifiable, Codable, Hashable {
     public var isPinned: Bool
     public var lastSeenDate: Date
     public var notes: String?
+    public var expiryDate: Date?
 
     public init(
         id: UUID = UUID(),
@@ -20,7 +28,8 @@ public struct CatalogEntry: Identifiable, Codable, Hashable {
         projectName: String? = nil,
         isPinned: Bool = false,
         lastSeenDate: Date = .now,
-        notes: String? = nil
+        notes: String? = nil,
+        expiryDate: Date? = nil
     ) {
         self.id = id
         self.variableKey = variableKey
@@ -31,5 +40,19 @@ public struct CatalogEntry: Identifiable, Codable, Hashable {
         self.isPinned = isPinned
         self.lastSeenDate = lastSeenDate
         self.notes = notes
+        self.expiryDate = expiryDate
+    }
+
+    public var expiryStatus: ExpiryStatus {
+        guard let expiryDate else { return .noExpiry }
+        let now = Date.now
+        if expiryDate < now {
+            return .expired
+        }
+        let sevenDaysFromNow = Calendar.current.date(byAdding: .day, value: 7, to: now)!
+        if expiryDate <= sevenDaysFromNow {
+            return .expiringSoon
+        }
+        return .valid
     }
 }

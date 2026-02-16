@@ -1,25 +1,26 @@
 import SwiftUI
 import MacKeyManagerLib
 
-struct AddVariableSheet: View {
+struct AddStoredKeySheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
+    @State private var key = ""
     @State private var value = ""
-    @State private var validationError: String?
+    @State private var notes = ""
+    @State private var tags = ""
     @State private var hasExpiry = false
     @State private var expiryDate = Calendar.current.date(byAdding: .day, value: 30, to: .now)!
+    @State private var validationError: String?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Add Variable")
+                Text("Add Key to Vault")
                     .font(.headline)
                 Spacer()
-                Button {
-                    dismiss()
-                } label: {
+                Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }
@@ -30,35 +31,35 @@ struct AddVariableSheet: View {
             Divider()
 
             Form {
-                TextField("Variable Name (e.g. API_KEY)", text: $name)
+                TextField("Display Name (e.g. Stripe API Key)", text: $name)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Variable Key (e.g. STRIPE_API_KEY)", text: $key)
                     .font(.system(.body, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: name) { _, newValue in
+                    .onChange(of: key) { _, newValue in
                         let cleaned = newValue.uppercased()
                             .replacingOccurrences(of: " ", with: "_")
                         if cleaned != newValue {
-                            name = cleaned
+                            key = cleaned
                         }
-                        validateName()
+                        validateKey()
                     }
 
-                TextField("Value", text: $value)
+                SecureField("Value", text: $value)
                     .font(.system(.body, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Notes (optional)", text: $notes)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Tags (comma-separated)", text: $tags)
                     .textFieldStyle(.roundedBorder)
 
                 if let error = validationError {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)
-                }
-
-                LabeledContent("Scope") {
-                    switch appState.envVarListVM.activeSource {
-                    case .global:
-                        Text("Global (.zshrc)")
-                    case .project(_, let projectName):
-                        Text("Project: \(projectName)")
-                    }
                 }
 
                 Toggle("Set expiry date", isOn: $hasExpiry)
@@ -78,13 +79,11 @@ struct AddVariableSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
 
-                Button("Add") {
-                    addVariable()
+                Button("Save to Vault") {
+                    addKey()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -92,43 +91,37 @@ struct AddVariableSheet: View {
             }
             .padding()
         }
-        .frame(width: 420, height: hasExpiry ? 380 : 320)
+        .frame(width: 450, height: hasExpiry ? 480 : 430)
     }
 
     private var isValid: Bool {
-        !name.isEmpty && validationError == nil
+        !name.isEmpty && !key.isEmpty && !value.isEmpty && validationError == nil
     }
 
-    private func validateName() {
-        if name.isEmpty {
+    private func validateKey() {
+        if key.isEmpty {
             validationError = nil
             return
         }
-
-        if !ShellParser.isValidVariableName(name) {
-            validationError = "Invalid name. Use letters, numbers, and underscores only. Must start with a letter or underscore."
+        if !ShellParser.isValidVariableName(key) {
+            validationError = "Invalid key name. Use letters, numbers, and underscores only."
             return
         }
-
-        if appState.envVarListVM.allVariables.contains(where: { $0.name == name }) {
-            validationError = "A variable named '\(name)' already exists."
-            return
-        }
-
         validationError = nil
     }
 
-    private func addVariable() {
+    private func addKey() {
         guard isValid else { return }
-        appState.envVarListVM.addVariable(name: name, value: value)
-
-        if hasExpiry {
-            // Find the newly added variable and set expiry
-            if let variable = appState.envVarListVM.allVariables.first(where: { $0.name == name }) {
-                appState.envVarListVM.setExpiryDate(for: variable.id, date: expiryDate)
-            }
-        }
-
+        let tagList = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let expiry: Date? = hasExpiry ? expiryDate : nil
+        appState.keyVaultService.addKey(
+            name: name,
+            key: key,
+            value: value,
+            notes: notes.isEmpty ? nil : notes,
+            tags: tagList,
+            expiryDate: expiry
+        )
         dismiss()
     }
 }

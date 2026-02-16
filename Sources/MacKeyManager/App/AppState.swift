@@ -6,6 +6,7 @@ final class AppState {
     let zshrcService: ZshrcService
     let catalogService: CatalogService
     let fileWatcher: FileWatcherService
+    let keyVaultService: KeyVaultService
     let envVarListVM: EnvVarListViewModel
     let projectVM: ProjectViewModel
 
@@ -13,12 +14,14 @@ final class AppState {
         let zshrc = ZshrcService()
         let catalog = CatalogService()
         let watcher = FileWatcherService()
+        let vault = KeyVaultService()
         let projectVM = ProjectViewModel()
-        let envVarListVM = EnvVarListViewModel(zshrcService: zshrc, catalogService: catalog)
+        let envVarListVM = EnvVarListViewModel(zshrcService: zshrc, catalogService: catalog, keyVaultService: vault)
 
         self.zshrcService = zshrc
         self.catalogService = catalog
         self.fileWatcher = watcher
+        self.keyVaultService = vault
         self.projectVM = projectVM
         self.envVarListVM = envVarListVM
 
@@ -29,6 +32,9 @@ final class AppState {
 
         // Start watching .zshrc
         watcher.watch(url: zshrc.fileURL)
+
+        // Load vault
+        vault.load()
 
         // Load global variables on startup
         envVarListVM.loadGlobalVariables()

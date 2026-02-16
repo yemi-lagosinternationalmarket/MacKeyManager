@@ -7,7 +7,6 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
@@ -35,6 +34,16 @@ struct MenuBarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    if !expiringEntries.isEmpty {
+                        sectionHeader("Expiring Soon")
+                        ForEach(expiringEntries) { entry in
+                            MenuBarEntryRow(entry: entry, expiryStatus: entry.expiryStatus) {
+                                appState.catalogService.togglePin(entryID: entry.id)
+                            }
+                            Divider().padding(.leading, 8)
+                        }
+                    }
+
                     if !pinnedEntries.isEmpty {
                         sectionHeader("Pinned")
                         ForEach(pinnedEntries) { entry in
@@ -55,7 +64,7 @@ struct MenuBarView: View {
                         }
                     }
 
-                    if pinnedEntries.isEmpty && displayEntries.isEmpty {
+                    if pinnedEntries.isEmpty && displayEntries.isEmpty && expiringEntries.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: searchText.isEmpty ? "tray" : "magnifyingglass")
                                 .font(.title2)
@@ -73,7 +82,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Footer actions
             HStack {
                 Button("Open MacKeyManager") {
                     NSApp.activate(ignoringOtherApps: true)
@@ -101,22 +109,30 @@ struct MenuBarView: View {
         .frame(width: 300)
     }
 
-    // MARK: - Computed
+    private var expiringEntries: [CatalogEntry] {
+        let expiring = appState.catalogService.expiringSoonEntries() + appState.catalogService.expiredEntries()
+        if searchText.isEmpty { return expiring }
+        let query = searchText.lowercased()
+        return expiring.filter { $0.name.lowercased().contains(query) }
+    }
 
     private var pinnedEntries: [CatalogEntry] {
         let pinned = appState.catalogService.pinnedEntries()
-        if searchText.isEmpty { return pinned }
+        let expiringIDs = Set(expiringEntries.map(\.id))
+        let filtered = pinned.filter { !expiringIDs.contains($0.id) }
+        if searchText.isEmpty { return filtered }
         let query = searchText.lowercased()
-        return pinned.filter { $0.name.lowercased().contains(query) }
+        return filtered.filter { $0.name.lowercased().contains(query) }
     }
 
     private var displayEntries: [CatalogEntry] {
+        let expiringIDs = Set(expiringEntries.map(\.id))
         if searchText.isEmpty {
             return appState.catalogService.recentEntries(limit: 10)
-                .filter { !$0.isPinned }
+                .filter { !$0.isPinned && !expiringIDs.contains($0.id) }
         }
         return appState.catalogService.search(query: searchText)
-            .filter { !$0.isPinned }
+            .filter { !$0.isPinned && !expiringIDs.contains($0.id) }
     }
 
     @ViewBuilder

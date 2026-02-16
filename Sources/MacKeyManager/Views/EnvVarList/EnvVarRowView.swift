@@ -4,11 +4,12 @@ import MacKeyManagerLib
 struct EnvVarRowView: View {
     let variable: EnvironmentVariable
     let isSelected: Bool
+    var expiryStatus: ExpiryStatus? = nil
+    var onSaveToVault: (() -> Void)? = nil
     @State private var isValueRevealed = false
 
     var body: some View {
         HStack(spacing: 8) {
-            // Variable name
             Text(variable.name)
                 .font(.system(.body, design: .monospaced, weight: .medium))
                 .foregroundStyle(.primary)
@@ -17,7 +18,6 @@ struct EnvVarRowView: View {
             Text("=")
                 .foregroundStyle(.tertiary)
 
-            // Value (masked or revealed)
             Group {
                 if isValueRevealed {
                     Text(variable.value)
@@ -33,7 +33,6 @@ struct EnvVarRowView: View {
 
             Spacer()
 
-            // Reveal toggle
             Button {
                 isValueRevealed.toggle()
             } label: {
@@ -44,8 +43,11 @@ struct EnvVarRowView: View {
             .buttonStyle(.plain)
             .help(isValueRevealed ? "Hide value" : "Show value")
 
-            // Scope badge
             scopeBadge
+
+            if let expiryStatus, expiryStatus == .expired || expiryStatus == .expiringSoon {
+                expiryBadge(expiryStatus)
+            }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
@@ -60,8 +62,13 @@ struct EnvVarRowView: View {
                 ClipboardManager.copy("export \(variable.name)=\(variable.value)")
             }
             Divider()
+            if let onSaveToVault {
+                Button("Save to Vault") {
+                    onSaveToVault()
+                }
+            }
+            Divider()
             Button("Delete", role: .destructive) {
-                // Handled by parent via notification
                 NotificationCenter.default.post(
                     name: .deleteVariable,
                     object: variable.id
@@ -86,6 +93,16 @@ struct EnvVarRowView: View {
                 (variable.scope == .global ? Color.blue : Color.green).opacity(0.12),
                 in: RoundedRectangle(cornerRadius: 4)
             )
+    }
+
+    @ViewBuilder
+    private func expiryBadge(_ status: ExpiryStatus) -> some View {
+        let color: Color = status == .expired ? .red : .orange
+        let label = status == .expired ? "Expired" : "Expires soon"
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .help(label)
     }
 }
 

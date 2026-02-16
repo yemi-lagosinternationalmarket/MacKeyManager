@@ -9,6 +9,12 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selectedSection) {
+            Section("Key Vault") {
+                Label("Vault", systemImage: "lock.shield")
+                    .tag(SidebarSection.vault)
+                    .badge(appState.keyVaultService.storedKeys.count)
+            }
+
             Section("Environment") {
                 Label("Global (.zshrc)", systemImage: "globe")
                     .tag(SidebarSection.global)
@@ -35,8 +41,6 @@ struct SidebarView: View {
             handleSectionChange(newValue)
         }
     }
-
-    // MARK: - Project Row
 
     @ViewBuilder
     private func projectRow(_ project: Project) -> some View {
@@ -65,8 +69,6 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Add Project Button
-
     private var addProjectButton: some View {
         Button {
             appState.projectVM.importProject()
@@ -80,13 +82,13 @@ struct SidebarView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Section Change
-
     private func handleSectionChange(_ section: SidebarSection?) {
         guard let section else { return }
         let vm = appState.envVarListVM
 
         switch section {
+        case .vault:
+            break
         case .global:
             vm.activeSource = .global
             vm.loadGlobalVariables()

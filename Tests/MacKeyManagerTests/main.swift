@@ -12,6 +12,8 @@ struct TestMain {
         runDotEnvServiceTests()
         runCatalogServiceTests()
         runValidatorTests()
+        runExpiryTests()
+        runKeyVaultServiceTests()
 
         printResults()
 
